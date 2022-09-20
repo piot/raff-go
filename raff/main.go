@@ -6,6 +6,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/alecthomas/kong"
 	"github.com/fatih/color"
@@ -39,33 +40,38 @@ func (c *ViewCmd) Run() error {
 
 	for {
 		header, err := raff.ReadChunkHeader(file)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			log.Printf("Encountered end of file")
+
 			break
 		}
+
 		if err != nil {
-			return err
+			return fmt.Errorf("could not read chunk header %w", err)
 		}
 
 		if header.Icon == 0 && header.Name == 0 {
-			log.Printf("Found proper end of file chunk")
 			break
 		}
 
 		nameWithColor := nameColor.Sprint(raff.NameToString(header.Name))
 		octetCountWithColor := octetCountColor.Sprintf("%d", header.OctetCount)
+
 		fmt.Printf("%2s %4s %s\n", raff.IconToString(header.Icon), nameWithColor, octetCountWithColor)
-		file.Seek(int64(header.OctetCount), os.SEEK_CUR)
+
+		if _, err := file.Seek(int64(header.OctetCount), os.SEEK_CUR); err != nil {
+			return fmt.Errorf("could not seek to next chunk %w", err)
+		}
 	}
 
 	return nil
 }
 
 func main() {
+	color.NoColor = false
 	ctx := kong.Parse(&Options{})
 
-	err := ctx.Run()
-	if err != nil {
+	if err := ctx.Run(); err != nil {
 		log.Println(err)
 		os.Exit(1)
 	}
