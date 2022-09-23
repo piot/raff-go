@@ -6,14 +6,16 @@
 package main
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/alecthomas/kong"
-	"github.com/fatih/color"
-	raff "github.com/piot/raff-go/src"
 	"io"
 	"log"
 	"os"
+
+	"github.com/alecthomas/kong"
+	"github.com/fatih/color"
+	raff "github.com/piot/raff-go/src"
 )
 
 type Options struct {
@@ -39,6 +41,11 @@ func (c *ViewCmd) Run() error {
 	octetCountColor := color.New(color.FgHiMagenta)
 
 	for {
+		headerFilePosition, seekErr := file.Seek(0, io.SeekCurrent)
+		if seekErr != nil {
+			return fmt.Errorf("could not seek %w", seekErr)
+		}
+
 		header, err := raff.ReadChunkHeader(file)
 		if errors.Is(err, io.EOF) {
 			log.Printf("Encountered end of file")
@@ -57,10 +64,25 @@ func (c *ViewCmd) Run() error {
 		nameWithColor := nameColor.Sprint(raff.NameToString(header.Name))
 		octetCountWithColor := octetCountColor.Sprintf("%d", header.OctetCount)
 
-		fmt.Printf("%2s %4s %s\n", raff.IconToString(header.Icon), nameWithColor, octetCountWithColor)
+		fmt.Printf("%2s %4s %s (pos: %08x)\n", raff.IconToString(header.Icon), nameWithColor, octetCountWithColor, headerFilePosition)
 
-		if _, err := file.Seek(int64(header.OctetCount), os.SEEK_CUR); err != nil {
-			return fmt.Errorf("could not seek to next chunk %w", err)
+		if c.Verbosity > 0 {
+			payload := make([]byte, header.OctetCount)
+
+			octetCount, readErr := file.Read(payload)
+			if readErr != nil {
+				return fmt.Errorf("could not read payload %w", readErr)
+			}
+
+			if octetCount != int(header.OctetCount) {
+				return fmt.Errorf("could not read payload")
+			}
+
+			fmt.Printf("%v", hex.Dump(payload))
+		} else {
+			if _, err := file.Seek(int64(header.OctetCount), io.SeekCurrent); err != nil {
+				return fmt.Errorf("could not seek to next chunk %w", err)
+			}
 		}
 	}
 
