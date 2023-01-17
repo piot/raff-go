@@ -20,6 +20,10 @@ func FileHeader() []byte {
 
 type FourOctets uint32
 
+func MakeFourOctets(a, b, c, d byte) FourOctets {
+	return FourOctets(uint32(a)<<24 | uint32(b)<<16 | uint32(c)<<8 | uint32(d))
+}
+
 func IconToString(f FourOctets) string {
 	c1 := byte(f >> 24)
 	c2 := byte((f >> 16) & 0xff)
